@@ -1,75 +1,101 @@
-import React, { useState, useEffect } from 'react';
-import SimpleWebRTC from 'simplewebrtc';
-import Peer from 'peerjs';
+import React, { useEffect, useState } from "react";
+import peer from "../../Peer.js";
 
-const peer = new Peer();
-
-
-function VideoCall() {
-  const [webrtc, setWebrtc] = useState(null);
+const VideoCall = () => {
+  const [myStream, setMyStream] = useState(null);
+  const [theirStream, setTheirStream] = useState(null);
+  const [myPeerId, setMyPeerId] = useState("");
+  const [theirPeerId, setTheirPeerId] = useState("");
+  const [callAccepted, setCallAccepted] = useState(false);
+  const [callEnded, setCallEnded] = useState(false);
 
   useEffect(() => {
-    // create a new WebRTC object
-    const webrtcObj = new SimpleWebRTC({
-      url: 'https://signalserver.example.com',
-      media: { audio: true, video: true },
-      autoRequestMedia: true
-    });
+    navigator.mediaDevices
+      .getUserMedia({ video: true, audio: true })
+      .then((stream) => {
+        setMyStream(stream);
 
-    // set the WebRTC object to the state
-    setWebrtc(webrtcObj);
-
-    // listen to the 'readyToCall' event
-    webrtcObj.on('readyToCall', function () {
-      // join the video call with a specific room name
-      webrtcObj.joinRoom('my-room');
-    });
-
-    // listen to the 'streamAdded' event
-    webrtcObj.on('streamAdded', handleRemoteStreamAdded);
+        peer.on("open", (id) => {
+          setMyPeerId(id);
+        });
+      });
   }, []);
 
-  const startLocalVideo = () => {
-    // check if WebRTC object is available
-    if (webrtc) {
-      // get the local video stream and attach it to a video element
-      webrtc.startLocalVideo();
-      const localVideo = document.getElementById('localVideo');
-      webrtc.localVideoEl = localVideo;
-    }
+  const callUser = (id) => {
+    const call = peer.call(id, myStream);
+
+    call.on("stream", (stream) => {
+      setTheirStream(stream);
+    });
+
+    call.on("close", () => {
+      setTheirStream(null);
+      setCallEnded(true);
+    });
+
+    setCallAccepted(true);
   };
-  
-  const handleRemoteStreamAdded = (event) => {
-    // check if WebRTC object is available
-    if (webrtc) {
-      // get the remote video stream and attach it to a video element
-      const stream = event.stream;
-      const remoteVideo = document.getElementById('remoteVideo');
-      remoteVideo.srcObject = stream;
-    }
-  };  
 
-  // function to initiate a video call
-  const initiateCall = () => {
-    console.log(`My ID is ${peer.id}`);
+  const answerCall = () => {
+    setCallAccepted(true);
 
-    // check if WebRTC object is available
-    if (webrtc) {
-      // call the other participant
-      startLocalVideo();
-    }
+    const call = peer.call(theirPeerId, myStream);
+
+    call.on("stream", (stream) => {
+      setTheirStream(stream);
+    });
+
+    call.on("close", () => {
+      setTheirStream(null);
+      setCallEnded(true);
+    });
   };
 
   return (
     <div>
-      <button onClick={initiateCall}>Call</button>
-      <div>
-        <video id="localVideo" autoPlay playsInline muted></video>
-        <video id="remoteVideo" autoPlay playsInline></video>
-      </div>
+      {myStream && (
+        <video
+          playsInline
+          muted
+          ref={(node) => (node.srcObject = myStream)}
+          autoPlay
+        />
+      )}
+
+      {!callAccepted && (
+        <div>
+          <h2>Peer ID: {myPeerId}</h2>
+          <input
+            type="text"
+            value={theirPeerId}
+            onChange={(e) => setTheirPeerId(e.target.value)}
+            placeholder="Enter ID to call"
+          />
+          <button onClick={() => callUser(theirPeerId)}>Call</button>
+        </div>
+      )}
+
+      {theirStream && (
+        <video
+          playsInline
+          ref={(node) => (node.srcObject = theirStream)}
+          autoPlay
+        />
+      )}
+      {callAccepted && !callEnded && (
+        <div>
+          <button onClick={() => setCallEnded(true)}>End Call</button>
+        </div>
+      )}
+
+      {theirStream && !callAccepted && (
+        <div>
+          <h2>Incoming Call...</h2>
+          <button onClick={answerCall}>Answer</button>
+        </div>
+      )}
     </div>
-  
   );
-}
+};
 
 export default VideoCall;
