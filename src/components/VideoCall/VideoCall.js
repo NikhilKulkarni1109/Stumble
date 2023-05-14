@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import peer from "../../Peer.js";
 
 const VideoCall = () => {
+  const myRef = useRef(React.createRef);
+  const theirRef = useRef(React.createRef);
+  
   const [myStream, setMyStream] = useState(null);
   const [theirStream, setTheirStream] = useState(null);
   const [myPeerId, setMyPeerId] = useState("");
@@ -10,15 +13,31 @@ const VideoCall = () => {
   const [callEnded, setCallEnded] = useState(false);
 
   useEffect(() => {
+
+    peer.on("open", (id) => {
+      setMyPeerId(id);
+      console.log(id);
+    });
+
+    peer.on('call', (call) => {
+      answerCall(call);
+    });
+
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
       .then((stream) => {
         setMyStream(stream);
-
-        peer.on("open", (id) => {
-          setMyPeerId(id);
-        });
+        myRef.current.srcObject = stream;
+      })
+      .catch((error) => {
+        console.error("Error accessing media devices.", error);
       });
+
+    // // Clean up the peer object on unmount
+    // return () => {
+    //   peer.disconnect();
+    //   peer.destroy();
+    // };    
   }, []);
 
   const callUser = (id) => {
@@ -36,51 +55,58 @@ const VideoCall = () => {
     setCallAccepted(true);
   };
 
-  const answerCall = () => {
+  const answerCall = (call) => {
     setCallAccepted(true);
-
-    const call = peer.call(theirPeerId, myStream);
-
+  
+    call.answer(myStream);
+  
     call.on("stream", (stream) => {
       setTheirStream(stream);
+      theirRef.current.srcObject = stream;
     });
-
+  
     call.on("close", () => {
       setTheirStream(null);
       setCallEnded(true);
     });
   };
-
+  
   return (
     <div>
       {myStream && (
-        <video
-          playsInline
-          muted
-          ref={(node) => (node.srcObject = myStream)}
-          autoPlay
-        />
+        <div> 
+          <h2>My ID: {myPeerId}</h2>
+          <video
+            playsInline
+            muted
+            ref={myRef}
+            autoPlay
+          />
+        </div>
       )}
 
       {!callAccepted && (
         <div>
-          <h2>Peer ID: {myPeerId}</h2>
+          <h2>Peer ID: </h2>
           <input
             type="text"
             value={theirPeerId}
             onChange={(e) => setTheirPeerId(e.target.value)}
-            placeholder="Enter ID to call"
+            placeholder="Enter Peer ID to call"
           />
           <button onClick={() => callUser(theirPeerId)}>Call</button>
         </div>
       )}
 
       {theirStream && (
-        <video
-          playsInline
-          ref={(node) => (node.srcObject = theirStream)}
-          autoPlay
-        />
+        <div> 
+        <h2>Their ID: {theirPeerId}</h2>      
+          <video
+            playsInline
+            ref={theirRef}
+            autoPlay
+          />
+        </div> 
       )}
       {callAccepted && !callEnded && (
         <div>
